@@ -78,17 +78,17 @@ def load_models():
 
 def main():
 
-    st.set_page_config(page_title="Chat RAG", layout="wide")
+    st.set_page_config(page_title="EpiRAG", layout="wide")
 
     # Chemin vers le fichier logo
     logo_path = "imgs/logo.png"
     st.image(logo_path, width=150)  # Vous pouvez ajuster la largeur selon vos besoins
 
-    st.title("Chat RAG - Retrieval Augmented Generation")
+    st.title("EpiRAG")
     st.markdown(
         """
-        Cette interface vous permet d'engager une conversation avec un assistant AI qui utilise un mécanisme de récupération 
-        de documents pour générer des réponses précises et concises.
+        Cette interface vous permet d'engager une conversation avec un assistant qui utilise un mécanisme de récupération 
+        de documents pour fournir des réponses précises et concises.
         """
     )
     
