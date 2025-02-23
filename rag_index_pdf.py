@@ -1,14 +1,15 @@
 import os
-from tqdm.notebook import tqdm
+import tqdm
 import pandas as pd
 from typing import Optional, List
 
+import torch
 from transformers import AutoTokenizer
 from sentence_transformers import SentenceTransformer
 
 from langchain.docstore.document import Document as LangchainDocument
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS # pip install faiss-cpu ou pip install faiss-gpu
 from langchain_community.vectorstores.utils import DistanceStrategy
 from langchain_huggingface import HuggingFaceEmbeddings
 
@@ -82,7 +83,7 @@ if __name__ == "__main__":
 
     RAW_KNOWLEDGE_BASE = [
         LangchainDocument(page_content=doc["text"], metadata={"source": doc["source"]})
-        for doc in tqdm(ds)
+        for doc in tqdm.tqdm(ds)
     ]
     
     print("Define embedding model ...")
@@ -101,7 +102,7 @@ if __name__ == "__main__":
     embedding_model = HuggingFaceEmbeddings(
         model_name=EMBEDDING_MODEL_NAME,
         multi_process=True,
-        model_kwargs={"device": "cuda"},
+        model_kwargs={"device": "cuda" if torch.cuda.is_available() else "cpu"},
         encode_kwargs={"normalize_embeddings": True},  # Use cosine similarity
     )
     
