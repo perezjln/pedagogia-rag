@@ -45,16 +45,7 @@ class LLMGenerationTool(Tool):
     output_type = "string"
 
     def forward(self, retrieved_docs, query: str):
-        """
-        Génère une réponse basée sur les documents récupérés et la requête de l'utilisateur.
 
-        Args:
-            retrieved_docs (list): Liste des documents récupérés à partir de FAISS.
-            query (str): Requête de l'utilisateur pour laquelle une réponse doit être générée.
-
-        Returns:
-            str: Réponse générée par le modèle de langage.
-        """
         context = "\n".join([doc.page_content for doc in retrieved_docs])
 
         prompt = f'''
@@ -70,20 +61,22 @@ class LLMGenerationTool(Tool):
         {query}
         '''
 
-        inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
-        output = model.generate(**inputs, max_new_tokens=200)
-        return tokenizer.decode(output[0], skip_special_tokens=True)
+        # Transformers
+        if tokenizer:
+            inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+            output = model.generate(**inputs, max_new_tokens=200)
+            return tokenizer.decode(output[0], skip_special_tokens=True)
 
+        # HfAPI
+        messages = [{"role": "user",  "content": prompt}]
+        response = model(messages, stop_sequences=["END"])
+        return response.content
 
 if __name__ == "__main__":
 
     # Charger les variables d'environnement
     load_dotenv()
     login(token=os.environ.get("HF_API_TOKEN"))
-
-    # Instancier les outils
-    generation_tool = LLMGenerationTool()
-    retrieval_tool = FaissRetrievalTool()
 
     # Charger le modèle d'embedding
     EMBEDDING_MODEL_NAME = "thenlper/gte-small"
@@ -112,8 +105,13 @@ if __name__ == "__main__":
         )
     else:
         model_id = "Qwen/Qwen2.5-Coder-32B-Instruct"
+        tokenizer = None
         model = HfApiModel(model_id=model_id, 
                            token=os.environ["HF_API_TOKEN"]) 
+
+    # Instancier les outils
+    generation_tool = LLMGenerationTool()
+    retrieval_tool = FaissRetrievalTool()
 
     # Créer l'agent CodeAgent avec les outils
     agent = CodeAgent(tools=[retrieval_tool, generation_tool], 
