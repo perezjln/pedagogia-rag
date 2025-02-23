@@ -13,11 +13,12 @@ from smolagents import HfApiModel
 def do_generate(model, tokenizer, retrieved_docs, user_query):
     context = "\n".join([doc.page_content for doc in retrieved_docs])
     prompt = f"""
-You are an AI assistant.
-You answer the question.
-Your answer should be informative and concise.
-You use the following context to generate the answer.
-You OnLY answer with markdown format.
+Vous êtes un assistant IA.  
+Vous répondez à la question.  
+Votre réponse doit être informative et concise.  
+Vous utilisez le contexte suivant pour générer la réponse.  
+Vous répondez UNIQUEMENT en format markdown.
+Tu réponds UNIQUEMENT en FRANÇAIS.
 
 Context:
 {context}
