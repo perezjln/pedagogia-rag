@@ -39,6 +39,7 @@ Question:
 # Chargement et mise en cache des modèles et de l'index
 @st.cache_resource(show_spinner=False)
 def load_models():
+
     load_dotenv()
     hf_token = os.environ.get("HF_API_TOKEN")
     if hf_token is None:
@@ -76,7 +77,13 @@ def load_models():
     return faiss_db, model, tokenizer
 
 def main():
+
     st.set_page_config(page_title="Chat RAG", layout="wide")
+
+    # Chemin vers le fichier logo
+    logo_path = "imgs/logo.png"
+    st.image(logo_path, width=150)  # Vous pouvez ajuster la largeur selon vos besoins
+
     st.title("Chat RAG - Retrieval Augmented Generation")
     st.markdown(
         """
@@ -122,9 +129,12 @@ def main():
         # Optionnel : affichage des documents récupérés dans un expander
         with st.expander("Documents récupérés"):
             for i, doc in enumerate(retrieved_docs):
-                source_link = doc.metadata.get("source", "#")
-                st.markdown(f"[📄 Accéder au document {i+1}]({source_link})", unsafe_allow_html=True)
+                source_file = doc.metadata.get("source", None)
+                if source_file:
+                    source_link = os.path.join("docs", os.path.basename(source_file))
+                    st.markdown(f"[📄 Accéder au document {i+1}]({source_link})", unsafe_allow_html=True)
                 st.write(doc.page_content)
+
 
 if __name__ == "__main__":
     main()
