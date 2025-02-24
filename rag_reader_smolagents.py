@@ -83,7 +83,7 @@ if __name__ == "__main__":
     embedding_model = HuggingFaceEmbeddings(
         model_name=EMBEDDING_MODEL_NAME,
         multi_process=True,
-        model_kwargs={"device": "cuda"},
+        model_kwargs={"device": "cuda" if torch.cuda.is_available() else "cpu"},
         encode_kwargs={"normalize_embeddings": True},
     )
 
@@ -121,5 +121,4 @@ if __name__ == "__main__":
     # Exécuter une requête test
     query = "What are the benefits of the attention mechanism in deep learning? You cite the retrieved passages in your response."
     response = agent.run(query)
-
     print(response)
