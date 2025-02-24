@@ -13,11 +13,12 @@ from smolagents import HfApiModel
 def do_generate(model, tokenizer, retrieved_docs, user_query):
     context = "\n".join([doc.page_content for doc in retrieved_docs])
     prompt = f"""
-You are an AI assistant.
-You answer the question.
-Your answer should be informative and concise.
-You use the following context to generate the answer.
-You OnLY answer with markdown format.
+Vous êtes un assistant IA.  
+Vous répondez à la question.  
+Votre réponse doit être informative et concise.  
+Vous utilisez le contexte suivant pour générer la réponse.  
+Vous répondez UNIQUEMENT en format markdown.
+Tu réponds UNIQUEMENT en FRANÇAIS.
 
 Context:
 {context}
@@ -39,6 +40,7 @@ Question:
 # Chargement et mise en cache des modèles et de l'index
 @st.cache_resource(show_spinner=False)
 def load_models():
+
     load_dotenv()
     hf_token = os.environ.get("HF_API_TOKEN")
     if hf_token is None:
@@ -76,12 +78,18 @@ def load_models():
     return faiss_db, model, tokenizer
 
 def main():
-    st.set_page_config(page_title="Chat RAG", layout="wide")
-    st.title("Chat RAG - Retrieval Augmented Generation")
+
+    st.set_page_config(page_title="EpiRAG", layout="wide")
+
+    # Chemin vers le fichier logo
+    logo_path = "imgs/logo.png"
+    st.image(logo_path, width=150)  # Vous pouvez ajuster la largeur selon vos besoins
+
+    st.title("EpiRAG")
     st.markdown(
         """
-        Cette interface vous permet d'engager une conversation avec un assistant AI qui utilise un mécanisme de récupération 
-        de documents pour générer des réponses précises et concises.
+        Cette interface vous permet d'engager une conversation avec un assistant qui utilise un mécanisme de récupération 
+        de documents pour fournir des réponses précises et concises.
         """
     )
     
@@ -122,9 +130,12 @@ def main():
         # Optionnel : affichage des documents récupérés dans un expander
         with st.expander("Documents récupérés"):
             for i, doc in enumerate(retrieved_docs):
-                source_link = doc.metadata.get("source", "#")
-                st.markdown(f"[📄 Accéder au document {i+1}]({source_link})", unsafe_allow_html=True)
+                source_file = doc.metadata.get("source", None)
+                if source_file:
+                    source_link = os.path.join("docs", os.path.basename(source_file))
+                    st.markdown(f"[📄 Accéder au document {i+1}]({source_link})", unsafe_allow_html=True)
                 st.write(doc.page_content)
+
 
 if __name__ == "__main__":
     main()
