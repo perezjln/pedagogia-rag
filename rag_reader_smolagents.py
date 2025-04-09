@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
     # Charger les variables d'environnement
     load_dotenv()
-    login(token=os.environ.get("HF_API_TOKEN"))
+    login(token=os.environ.get("HUGGINGFACE_TOKEN"))
 
     # Charger le modèle d'embedding
     EMBEDDING_MODEL_NAME = "thenlper/gte-small"

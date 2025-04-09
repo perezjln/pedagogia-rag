@@ -43,9 +43,9 @@ Question:
 def load_models():
     
     load_dotenv()
-    hf_token = os.environ.get("HF_API_TOKEN")
+    hf_token = os.environ.get("HUGGINGFACE_TOKEN")
     if hf_token is None:
-        st.error("La variable d'environnement HF_API_TOKEN n'est pas définie.")
+        st.error("La variable d'environnement HUGGINGFACE_TOKEN n'est pas définie.")
     login(token=hf_token)
     
     EMBEDDING_MODEL_NAME = "thenlper/gte-small"
