@@ -1,4 +1,6 @@
 import os
+import logging
+from pathlib import Path
 from tqdm.notebook import tqdm
 import pandas as pd
 from typing import Optional, List
@@ -12,38 +14,57 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.utils import DistanceStrategy
 from langchain_huggingface import HuggingFaceEmbeddings
 
-
 import datasets
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 # Define markdown separators for text splitting
 MARKDOWN_SEPARATORS = [
-    "\n#{1,6} ", "```\n", "\n\\*\\*\\*+\n", "\n---+\n", "\n___+\n",
-    "\n\n", "\n", " ", ""
+    "\n#{1,6} ",
+    "```\n",
+    "\n\\*\\*\\*+\n",
+    "\n---+\n",
+    "\n___+\n",
+    "\n\n",
+    "\n",
+    " ",
+    ""
 ]
 
-# Function to split documents into smaller chunks
 def split_documents(
     chunk_size: int,
     knowledge_base: List[LangchainDocument],
     tokenizer_name: Optional[str],
 ) -> List[LangchainDocument]:
     """
-    Split documents into chunks of maximum size `chunk_size` tokens.
+    Split documents into chunks of maximum size `chunk_size` tokens using a HuggingFace tokenizer.
+    
+    Parameters:
+        chunk_size (int): Maximum number of tokens in each chunk.
+        knowledge_base (List[LangchainDocument]): List of documents to split.
+        tokenizer_name (Optional[str]): Name of the pretrained model tokenizer.
+    
+    Returns:
+        List[LangchainDocument]: Processed list of document chunks with duplicates removed.
     """
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
     text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
         tokenizer,
         chunk_size=chunk_size,
-        chunk_overlap=int(chunk_size / 10),
+        chunk_overlap=chunk_size // 10,
         add_start_index=True,
         strip_whitespace=True,
         separators=MARKDOWN_SEPARATORS,
     )
     
-    # Process documents
-    docs_processed = [split for doc in knowledge_base for split in text_splitter.split_documents([doc])]
+    # Process and split each document in the knowledge base
+    docs_processed = []
+    for doc in knowledge_base:
+        splits = text_splitter.split_documents([doc])
+        docs_processed.extend(splits)
     
-    # Remove duplicates
+    # Remove duplicate chunks (based on their content)
     unique_texts = set()
     docs_processed_unique = []
     for doc in docs_processed:
@@ -54,43 +75,57 @@ def split_documents(
     return docs_processed_unique
 
 
-def do_test_retrieve():
-
-    print("Perform retrieval ...")
-    user_query = "how to create a pipeline object?"
-    print(f"\nStarting retrieval for {user_query=}...")
-    retrieved_docs = KNOWLEDGE_VECTOR_DATABASE.similarity_search(query=user_query, k=5)
+def do_test_retrieve(knowledge_db: FAISS) -> None:
+    """
+    Perform a test retrieval on the provided FAISS vector database.
     
-    # Display results
-    print("\n==================================Top document==================================")
-    print(retrieved_docs[0].page_content)
-    print("==================================Metadata==================================")
-    print(retrieved_docs[0].metadata)
+    Parameters:
+        knowledge_db (FAISS): The FAISS vector database instance.
+    """
+    user_query = "how to create a pipeline object?"
+    logging.info(f"Starting retrieval for query: '{user_query}'")
+    
+    retrieved_docs = knowledge_db.similarity_search(query=user_query, k=5)
+    
+    if retrieved_docs:
+        logging.info("==================================Top document==================================")
+        logging.info(retrieved_docs[0].page_content)
+        logging.info("==================================Metadata==================================")
+        logging.info(retrieved_docs[0].metadata)
+    else:
+        logging.info("No documents retrieved.")
 
 
-if __name__ == "__main__":
+def main() -> None:
     pd.set_option("display.max_colwidth", None)
     
-    print("Load dataset ...")
-    ds = datasets.load_dataset("m-ric/huggingface_doc", split="train")
-    RAW_KNOWLEDGE_BASE = [
+    logging.info("Loading dataset ...")
+    try:
+        ds = datasets.load_dataset("m-ric/huggingface_doc", split="train")
+    except Exception as e:
+        logging.error(f"Failed to load dataset: {e}")
+        return
+
+    raw_knowledge_base: List[LangchainDocument] = [
         LangchainDocument(page_content=doc["text"], metadata={"source": doc["source"]})
-        for doc in tqdm(ds)
+        for doc in tqdm(ds, desc="Loading documents")
     ]
     
-    print("Define embedding model ...")
     EMBEDDING_MODEL_NAME = "thenlper/gte-small"
-    print(f"Model's maximum sequence length: {SentenceTransformer(EMBEDDING_MODEL_NAME).max_seq_length}")
+    logging.info("Defining embedding model ...")
+    # Display model's maximum sequence length
+    model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    logging.info(f"Model's maximum sequence length: {model.max_seq_length}")
     
-    print("Process documents ...")
+    logging.info("Splitting and processing documents ...")
     docs_processed = split_documents(
         chunk_size=512,
-        knowledge_base=RAW_KNOWLEDGE_BASE,
+        knowledge_base=raw_knowledge_base,
         tokenizer_name=EMBEDDING_MODEL_NAME,
     )
-    print(f"Number of documents after processing: {len(docs_processed)}")
+    logging.info(f"Number of documents after processing: {len(docs_processed)}")
     
-    print("Initialize embedding model ...")
+    logging.info("Initializing embedding model ...")
     embedding_model = HuggingFaceEmbeddings(
         model_name=EMBEDDING_MODEL_NAME,
         multi_process=True,
@@ -98,16 +133,20 @@ if __name__ == "__main__":
         encode_kwargs={"normalize_embeddings": True},  # Use cosine similarity
     )
     
-    print("Create FAISS vector database ...")
-    KNOWLEDGE_VECTOR_DATABASE = FAISS.from_documents(
+    logging.info("Creating FAISS vector database ...")
+    knowledge_vector_database = FAISS.from_documents(
         docs_processed, embedding_model, distance_strategy=DistanceStrategy.COSINE
     )
     
-    print("Save local ...")
-    save_path = "faiss_index"
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
-    KNOWLEDGE_VECTOR_DATABASE.save_local(save_path)
-    print(f"FAISS index saved at {save_path}")
+    save_path = Path("faiss_index")
+    logging.info("Saving FAISS vector database locally ...")
+    save_path.mkdir(exist_ok=True)
+    knowledge_vector_database.save_local(str(save_path))
+    logging.info(f"FAISS index saved at {save_path.resolve()}")
+    
+    # Optionally run a test retrieval query
+    do_test_retrieve(knowledge_vector_database)
 
 
+if __name__ == "__main__":
+    main()

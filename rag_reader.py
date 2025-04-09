@@ -36,7 +36,7 @@ if __name__ == "__main__":
 
     # Load the API token from the environment
     load_dotenv()
-    login(token=os.environ.get("HF_API_TOKEN"))
+    login(token=os.environ.get("HUGGINGFACE_TOKEN"))
 
     print("Initialize embedding model ...")
     EMBEDDING_MODEL_NAME = "thenlper/gte-small"
