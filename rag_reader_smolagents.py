@@ -1,5 +1,6 @@
 import os
 import torch
+import logging
 
 from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.utils import DistanceStrategy
@@ -10,7 +11,11 @@ from huggingface_hub import login
 
 from smolagents import Tool, CodeAgent, HfApiModel
 
+
 class FaissRetrievalTool(Tool):
+    """
+    Tool for retrieving relevant documents from a FAISS index.
+    """
     name = "faiss_retriever"
     description = "Retrieve relevant documents from FAISS index."
     inputs = {
@@ -27,9 +32,14 @@ class FaissRetrievalTool(Tool):
     output_type = "array"
 
     def forward(self, query: str, k: int = 5):
+        logging.info("Performing FAISS similarity search.")
         return faiss_db.similarity_search(query=query, k=k)
 
+
 class LLMGenerationTool(Tool):
+    """
+    Tool for generating a response using a language model based on retrieved documents.
+    """
     name = "llm_generator"
     description = "Generate a response using a language model based on retrieved documents."
     inputs = {
@@ -44,41 +54,68 @@ class LLMGenerationTool(Tool):
     }
     output_type = "string"
 
-    def forward(self, retrieved_docs, query: str):
-
+    def forward(self, retrieved_docs, query: str) -> str:
+        # Build context from the retrieved documents.
         context = "\n".join([doc.page_content for doc in retrieved_docs])
+        logging.info("Constructed context from retrieved documents.")
 
-        prompt = f'''
-        You are an AI assistant.
-        You answer the question.
-        Your answer should be informative and concise.
-        You use the following context to generate the answer.
+        # Format prompt with clear context and question.
+        prompt = (
+            "You are an AI assistant.\n"
+            "Answer the question concisely and informatively using the provided context.\n\n"
+            "Context:\n"
+            f"{context}\n\n"
+            "Question:\n"
+            f"{query}"
+        )
 
-        Context:
-        {context}
+        logging.debug("Generated prompt for LLM generation.")
 
-        Question:
-        {query}
-        '''
-
-        # Transformers
+        # Transformers-based model path.
         if tokenizer:
-            inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
-            output = model.generate(**inputs, max_new_tokens=200)
-            return tokenizer.decode(output[0], skip_special_tokens=True)
+            inputs = tokenizer(prompt, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
+            logging.info("Running transformer model generation.")
+            with torch.no_grad():
+                output = model.generate(**inputs, max_new_tokens=200)
+            result = tokenizer.decode(output[0], skip_special_tokens=True)
+            logging.debug("Transformer model output generated.")
+            return result
 
-        # HfAPI
-        messages = [{"role": "user",  "content": prompt}]
+        # HfAPI model invocation.
+        logging.info("Running HfApi model generation.")
+        messages = [{"role": "user", "content": prompt}]
         response = model(messages, stop_sequences=["END"])
+        logging.debug("HfApi model output generated.")
         return response.content
 
-if __name__ == "__main__":
 
-    # Charger les variables d'environnement
+def main():
+    # Configure logging: both stream and optional file logging can be set up.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.StreamHandler()
+            # Uncomment the next line to enable file logging
+            # logging.FileHandler("app.log")
+        ]
+    )
+    
+    logging.info("Starting application.")
+
+    # Load environment variables.
     load_dotenv()
-    login(token=os.environ.get("HUGGINGFACE_TOKEN"))
+    logging.info("Environment variables loaded.")
 
-    # Charger le modèle d'embedding
+    # Check for required tokens.
+    hf_token = os.environ.get("HUGGINGFACE_TOKEN")
+    if not hf_token:
+        logging.error("HUGGINGFACE_TOKEN is not set in the environment.")
+        raise EnvironmentError("HUGGINGFACE_TOKEN is not set in the environment.")
+    login(token=hf_token)
+    logging.info("Logged into Hugging Face successfully.")
+
+    # Load embedding model.
     EMBEDDING_MODEL_NAME = "thenlper/gte-small"
     embedding_model = HuggingFaceEmbeddings(
         model_name=EMBEDDING_MODEL_NAME,
@@ -86,39 +123,63 @@ if __name__ == "__main__":
         model_kwargs={"device": "cuda" if torch.cuda.is_available() else "cpu"},
         encode_kwargs={"normalize_embeddings": True},
     )
+    logging.info(f"Embedding model '{EMBEDDING_MODEL_NAME}' loaded.")
 
-    # Charger l'index FAISS
+    # Load FAISS index.
     save_path = "faiss_index_pdf"
+    global faiss_db  # Make faiss_db globally available for the retrieval tool.
     faiss_db = FAISS.load_local(
-        save_path, embedding_model,
+        save_path,
+        embedding_model,
         distance_strategy=DistanceStrategy.COSINE,
         allow_dangerous_deserialization=True
     )
+    logging.info("FAISS index loaded successfully.")
 
-    # Charger le modèle de langage
-    backend = "HfApi"
+    # Load language model.
+    backend = "HfApi"  # Change to "transformers" to use transformer models directly.
+    global tokenizer, model  # Declare as globals so the tools can access them.
     if backend == "transformers":
         MODEL_NAME = "meta-llama/Llama-3.2-3B-Instruct"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
         model = AutoModelForCausalLM.from_pretrained(
             MODEL_NAME, torch_dtype=torch.float16, device_map="auto"
         )
+        logging.info(f"Transformer model '{MODEL_NAME}' loaded.")
     else:
         model_id = "Qwen/Qwen2.5-Coder-32B-Instruct"
-        tokenizer = None
-        model = HfApiModel(model_id=model_id, 
-                           token=os.environ["HF_API_TOKEN"]) 
+        tokenizer = None  # Transformer tokenizer not used in HfApi mode.
+        hf_api_token = os.environ.get("HUGGINGFACE_TOKEN")
+        if not hf_api_token:
+            logging.error("HUGGINGFACE_TOKEN is not set in the environment.")
+            raise EnvironmentError("HUGGINGFACE_TOKEN is not set in the environment.")
+        model = HfApiModel(model_id=model_id, token=hf_api_token)
+        logging.info(f"HfApi model '{model_id}' loaded.")
 
-    # Instancier les outils
+    # Instantiate tools.
     generation_tool = LLMGenerationTool()
     retrieval_tool = FaissRetrievalTool()
+    logging.info("Tools instantiated successfully.")
 
-    # Créer l'agent CodeAgent avec les outils
-    agent = CodeAgent(tools=[retrieval_tool, generation_tool], 
-                      model=model, 
+    # Create CodeAgent with the tools.
+    agent = CodeAgent(tools=[retrieval_tool, generation_tool],
+                      model=model,
                       add_base_tools=False)
+    logging.info("CodeAgent initialized with tools.")
 
-    # Exécuter une requête test
-    query = "What are the benefits of the attention mechanism in deep learning? You cite the retrieved passages in your response."
+    # Execute a test query.
+    query = (
+        "What are the benefits of the attention mechanism in deep learning? "
+        "Please cite the retrieved passages in your response."
+    )
+    logging.info("Running test query through the agent.")
     response = agent.run(query)
+    logging.info("Response received from agent.")
     print(response)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        logging.exception("An error occurred during execution:")
