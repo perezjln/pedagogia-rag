@@ -46,6 +46,9 @@ The repository is organized into several files, each focusing on a different asp
 - **rag_reader_streamlit_chat.py**  
   Implements a conversational chat interface with Streamlit, preserving conversation history, and providing a chat-like experience for dialogue-based interactions.
 
+- **rag_reader_streamlit_chat_studentprofile.py**  
+  Similar to `rag_reader_streamlit_chat.py`, but tailored for a specific use case involving student profiles, allowing users to query and interact with the system in a more personalized manner.
+
 - **rag_retriever.py**  
   A standalone script focused solely on retrieving documents from the local FAISS index based on a query, useful for testing and debugging the retrieval component.
 
